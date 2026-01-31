@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aura Pro Gallery</title>
+    <style>
+        :root {
+            /* Ultra Dark Modern Palette */
+            --bg-deep: #000000;
+            --bg-gradient: radial-gradient(circle at 50% 10%, #1a1a2e 0%, #000000 70%);
+            
+            /* Glass Elements */
+            --glass-surface: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-highlight: rgba(255, 255, 255, 0.1);
+            
+            /* Accents */
+            --accent-primary: #8A2BE2; /* BlueViolet */
+            --accent-glow: rgba(138, 43, 226, 0.5);
+            
+            /* Layout */
+            --card-width: 200px; /* Base size */
+            --card-aspect: 3/4;
+            --gap: 8px; /* Tighter gap as requested */
+            --nav-height: 80px;
+        }
+
+        /* --- Reset & Base --- */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; outline: none; }
+        
+        body {
+            margin: 0;
+            background: var(--bg-deep);
+            color: #fff;
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden; 
+            height: 100vh;
+        }
+
+        /* Ambient Backlight */
+        .ambient {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: var(--bg-gradient);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* --- Scroll Container --- */
+        #main-view {
+            height: 100%;
+            overflow-y: scroll;
+            padding-bottom: 120px;
+            scroll-behavior: smooth;
+            perspective: 1200px; /* Deeper perspective for animations */
+        }
+        #main-view::-webkit-scrollbar { display: none; }
+
+        /* --- Row Layout --- */
+        .section-row {
+            margin-bottom: 40px; /* Reduced vertical space */
+            position: relative;
+            transform-style: preserve-3d;
+            transform-origin: center center;
+            will-change: transform, opacity;
+            padding: 10px 0;
+        }
+
+        .row-header {
+            padding: 0 20px 8px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .row-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.9);
+            width: 70%;
+            font-family: inherit;
+        }
+
+        /* The + Button in Header */
+        .add-btn-header {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            display: grid;
+            place-items: center;
+            cursor: pointer;
+            transition: 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+        .add-btn-header:active { transform: scale(0.9); background: var(--accent-primary); }
+        .add-btn-header svg { fill: white; width: 18px; height: 18px; }
+        
+        /* Hidden file input needs to be actually clickable via label/js */
+        .add-btn-header input { 
+            position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; 
+        }
+
+        /* --- Horizontal Track --- */
+        .scroll-track {
+            display: flex;
+            gap: var(--gap);
+            overflow-x: scroll;
+            padding: 20px calc(50vw - (var(--card-width) / 2)); /* Center padding */
+            scroll-snap-type: x mandatory;
+            scrollbar-width: none;
+            align-items: center;
+        }
+        .scroll-track::-webkit-scrollbar { display: none; }
+
+        /* --- Card Design --- */
+        .card {
+            flex: 0 0 var(--card-width);
+            aspect-ratio: var(--card-aspect);
+            background: #1c1c1e;
+            border-radius: 14px;
+            overflow: hidden;
+            position: relative;
+            scroll-snap-align: center;
+            /* Important for the specific requested animation */
+            transform-origin: center center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            transition: box-shadow 0.2s;
+        }
+
+        .card-img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            display: block;
+            pointer-events: none;
+        }
+
+        /* Glass Input Overlay */
+        .card-meta {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%;
+            padding: 8px;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+        }
+
+        .img-name {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.7);
+            font-size: 12px;
+            text-align: center;
+            font-family: inherit;
+        }
+        .img-name:focus { color: #fff; }
+
+        /* --- Floating Bottom Dock --- */
+        .dock {
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 10, 10, 0.6);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 25px;
+            padding: 0 20px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            gap: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+
+        .dock-item {
+            width: 40px; height: 100%;
+            display: grid;
+            place-items: center;
+            opacity: 0.5;
+            transition: 0.3s;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .dock-item.active { opacity: 1; transform: translateY(-3px); }
+        .dock-item.active::after {
+            content:''; position:absolute; bottom: 8px; width:4px; height:4px; 
+            background: var(--accent-primary); border-radius:50%;
+            box-shadow: 0 0 8px var(--accent-primary);
+        }
+        
+        .dock-icon { width: 22px; height: 22px; fill: currentColor; }
+
+        /* --- Other Views --- */
+        .full-view, .bin-view {
+            display: none;
+            padding: 100px 10px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+        }
+        .full-view.active, .bin-view.active { display: grid; }
+        
+        /* Floating Size Control */
+        .controls { position: fixed; top: 15px; right: 15px; z-index: 90; opacity: 0.3; transition: 0.3s; }
+        .controls:hover { opacity: 1; }
+        input[type=range] { width: 80px; accent-color: var(--accent-primary); }
+
+        /* --- Lightbox --- */
+        #lightbox {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: #000; z-index: 200;
+            display: none; justify-content:center; align-items:center;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        #lightbox.open { display: flex; opacity: 1; }
+        #lightbox img { max-width:100%; max-height:100%; transition: transform 0.1s; }
+        
+        .lb-controls {
+            position: absolute; bottom: 30px; 
+            display: flex; gap: 20px;
+            z-index: 205;
+        }
+        .lb-btn {
+            background: rgba(255,255,255,0.15); width:44px; height:44px; border-radius:50%;
+            display: grid; place-items:center; color: white; cursor: pointer;
+            backdrop-filter: blur(10px);
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="ambient"></div>
+
+<div class="controls">
+    <input type="range" id="size-slider" min="150" max="280" value="200">
+</div>
+
+<!-- Views -->
+<div id="main-view"></div>
+<div id="grid-view" class="full-view"></div>
+<div id="bin-view" class="bin-view"></div>
+
+<!-- Dock -->
+<nav class="dock">
+    <div class="dock-item active" onclick="app.tab('home')">
+        <svg class="dock-icon" viewBox="0 0 24 24"><path d="M4 11h5V5H4v6zm0 7h5v-6H4v6zm6 0h5v-6h-5v6zm6 0h5v-6h-5v6zm-6-7h5V5h-5v6zm6-6v6h5V5h-5z"/></svg>
+    </div>
+    <div class="dock-item" onclick="app.tab('grid')">
+        <svg class="dock-icon" viewBox="0 0 24 24"><path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z"/></svg>
+    </div>
+    <div class="dock-item" onclick="app.tab('bin')">
+        <svg class="dock-icon" viewBox="0 0 24 24"><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg>
+    </div>
+</nav>
+
+<!-- FAB Row Adder -->
+<div onclick="app.addRow()" style="position:fixed; bottom:100px; right:20px; background:var(--accent-primary); width:50px; height:50px; border-radius:25px; display:grid; place-items:center; font-size:24px; color:white; box-shadow:0 0 20px var(--accent-glow); cursor:pointer;">+</div>
+
+<!-- Lightbox -->
+<div id="lightbox">
+    <img id="lb-img" src="">
+    <div class="lb-controls">
+        <div class="lb-btn" onclick="app.closeLb()">✕</div>
+        <div class="lb-btn" onclick="app.trashLb()" style="background:rgba(255,60,60,0.25)">🗑</div>
+    </div>
+</div>
+
+<script>
+/** 
+ * IndexedDB & App Logic 
+ * Optimized for Physics & Performance
+ */
+const DB_NAME = 'AuraProDB';
+const DB_VER = 3;
+
+class Gallery {
+    constructor() {
+        this.db = null;
+        this.els = {
+            main: document.getElementById('main-view'),
+            grid: document.getElementById('grid-view'),
+            bin: document.getElementById('bin-view'),
+            slider: document.getElementById('size-slider')
+        };
+        this.currLbId = null;
+        
+        // Listener for slider
+        this.els.slider.addEventListener('input', e => {
+            document.documentElement.style.setProperty('--card-width', e.target.value + 'px');
+        });
+        
+        this.init();
+    }
+
+    async init() {
+        await this.dbInit();
+        this.renderDashboard();
+        this.startEngine();
+        this.initLb();
+    }
+
+    // --- Database ---
+    dbInit() {
+        return new Promise(resolve => {
+            const req = indexedDB.open(DB_NAME, DB_VER);
+            req.onupgradeneeded = e => {
+                const db = e.target.result;
+                if(!db.objectStoreNames.contains('rows')) db.createObjectStore('rows', {keyPath:'id'});
+                if(!db.objectStoreNames.contains('imgs')) db.createObjectStore('imgs', {keyPath:'id'});
+                if(!db.objectStoreNames.contains('bin')) db.createObjectStore('bin', {keyPath:'id'});
+            };
+            req.onsuccess = e => { this.db = e.target.result; resolve(); };
+        });
+    }
+
+    // --- Data Ops ---
+    async get() {
+        const tx = this.db.transaction(['rows','imgs'], 'readonly');
+        const rows = await this.pReq(tx.objectStore('rows').getAll());
+        const imgs = await this.pReq(tx.objectStore('imgs').getAll());
+        return { 
+            rows: rows.sort((a,b)=>a.ts-b.ts), 
+            imgs: imgs.sort((a,b)=>b.ts-a.ts) 
+        };
+    }
+    
+    pReq(req) { return new Promise(r => req.onsuccess = e => r(e.target.result)); }
+
+    async addRow() {
+        const id = 'r'+Date.now();
+        const tx = this.db.transaction('rows','readwrite');
+        await tx.objectStore('rows').add({ id, title:'Untitled', ts:Date.now() });
+        this.renderDashboard();
+    }
+
+    async upload(rowId, input) {
+        if(!input.files.length) return;
+        const tx = this.db.transaction('imgs','readwrite');
+        const os = tx.objectStore('imgs');
+        for(let f of input.files) {
+            os.add({ id:'i'+Date.now()+Math.random(), rowId, blob:f, name:'', ts:Date.now() });
+        }
+        await new Promise(r=>tx.oncomplete=r);
+        this.renderDashboard();
+    }
+
+    async updateMeta(store, id, key, val) {
+        const tx = this.db.transaction(store, 'readwrite');
+        const os = tx.objectStore(store);
+        const item = await this.pReq(os.get(id));
+        if(item) { item[key]=val; os.put(item); }
+    }
+
+    // --- Renderers ---
+    async renderDashboard() {
+        const data = await this.get();
+        if(!data.rows.length) { this.addRow(); return; }
+
+        this.els.main.innerHTML = `<div style="height:20px"></div>`; // Spacer
+
+        data.rows.forEach(row => {
+            const rImgs = data.imgs.filter(i => i.rowId === row.id);
+            const el = document.createElement('div');
+            el.className = 'section-row';
+            el.innerHTML = `
+                <div class="row-header">
+                    <input class="row-title" value="${row.title}" placeholder="Collection..."
+                        onchange="app.updateMeta('rows','${row.id}','title',this.value)">
+                    <div class="add-btn-header">
+                        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        <input type="file" multiple accept="image/*" onchange="app.upload('${row.id}', this)">
+                    </div>
+                </div>
+                <div class="scroll-track">
+                    ${rImgs.map(img => this.cardHTML(img)).join('')}
+                    <!-- Pad End for centering logic -->
+                    <div style="flex:0 0 calc(50vw - var(--card-width)/2);"></div> 
+                </div>
+            `;
+            this.els.main.appendChild(el);
+        });
+    }
+
+    cardHTML(img) {
+        const url = URL.createObjectURL(img.blob);
+        return `
+            <div class="card" onclick="app.lb('${url}','${img.id}')">
+                <img src="${url}" class="card-img" loading="lazy">
+                <div class="card-meta">
+                    <input class="img-name" value="${img.name}" placeholder="Tag name"
+                        onclick="event.stopPropagation()"
+                        onchange="app.updateMeta('imgs','${img.id}','name',this.value)">
+                </div>
+            </div>
+        `;
+    }
+
+    async renderGrid() {
+        const d = await this.get();
+        this.els.grid.innerHTML = d.imgs.map(i => {
+            return `<div style="aspect-ratio:1; border-radius:4px; overflow:hidden;" onclick="app.lb('${URL.createObjectURL(i.blob)}','${i.id}')"><img src="${URL.createObjectURL(i.blob)}" style="width:100%;height:100%;object-fit:cover"></div>`
+        }).join('');
+    }
+
+    async renderBin() {
+        const tx = this.db.transaction('bin','readonly');
+        const items = await this.pReq(tx.objectStore('bin').getAll());
+        this.els.bin.innerHTML = items.length ? items.map(i => {
+            return `<div style="position:relative; aspect-ratio:1; border-radius:4px; overflow:hidden; border:1px solid #333;">
+                <img src="${URL.createObjectURL(i.blob)}" style="width:100%;height:100%;object-fit:cover;opacity:0.5">
+                <button onclick="app.restore('${i.id}')" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:none;border:none;color:#4f9;font-weight:bold">RESTORE</button>
+            </div>`;
+        }).join('') : '<div style="grid-column:1/-1; text-align:center; color:#555; margin-top:50px">Empty</div>';
+    }
+
+    // --- Interaction ---
+    tab(mode) {
+        document.querySelectorAll('.dock-item').forEach(e => e.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        ['main','grid','bin'].forEach(id => this.els[id + '-view'].style.display = 'none');
+        this.els[mode+'-view'].classList.remove('active'); // reset
+        
+        if(mode === 'home') this.els.main.style.display = 'block';
+        else if(mode === 'grid') { this.els.grid.classList.add('active'); this.renderGrid(); }
+        else { this.els.bin.classList.add('active'); this.renderBin(); }
+    }
+
+    // --- Physics Engine (The Animations) ---
+    startEngine() {
+        const run = () => {
+            // Only animate on Home Dashboard
+            if(this.els.main.style.display === 'none') { requestAnimationFrame(run); return; }
+
+            const vCenter = window.innerHeight / 2;
+            const rows = document.querySelectorAll('.section-row');
+
+            rows.forEach(row => {
+                const rect = row.getBoundingClientRect();
+                const track = row.querySelector('.scroll-track');
+                if(!track) return;
+
+                // --- 1. Vertical Stack Reveal ---
+                // Lower rows: Small and faded, grow as they hit center.
+                // Upper rows: Also shrink/fade as they leave (Standard "breathing list")
+                const rowCenter = rect.top + rect.height/2;
+                const distY = Math.abs(vCenter - rowCenter);
+                
+                // If it's too far down or up, shrink it.
+                // 400px is the 'sweet spot' range
+                let normY = Math.min(distY / 450, 1);
+                
+                // Animation calculation
+                const vScale = 1 - (normY * 0.15); // Scale between 1 and 0.85
+                const vOpac = 1 - (normY * 0.6); // Fade edges
+                
+                // Apply to entire row container for smooth entry/exit
+                row.style.transform = `scale(${vScale})`;
+                row.style.opacity = vOpac;
+
+
+                // --- 2. Horizontal "Stack Shrink" Animation ---
+                // "Next image seen little bit... left image shrinks... right image gets screen"
+                const center = track.scrollLeft + track.clientWidth / 2;
+                const cards = track.querySelectorAll('.card');
+                
+                cards.forEach(card => {
+                    const cCenter = card.offsetLeft + card.clientWidth / 2;
+                    // signed distance: positive = card is to the right, negative = to the left
+                    const dist = cCenter - center; 
+                    
+                    const absDist = Math.abs(dist);
+                    // Standardize based on card width
+                    const norm = Math.min(absDist / 180, 1);
+
+                    let scale = 1;
+                    let opacity = 1;
+                    let translateX = 0;
+
+                    // CENTER CARD
+                    if (absDist < 20) {
+                        scale = 1.05; // Pop slightly
+                        opacity = 1;
+                        card.style.zIndex = 10;
+                    } 
+                    // CARD ON LEFT (Leaving) -> Shrink significantly
+                    else if (dist < 0) {
+                        scale = 1 - (norm * 0.25); // Shrinks to 0.75
+                        opacity = 1 - (norm * 0.5); 
+                        translateX = norm * 20; // Shift slightly right to 'stick' a bit
+                    }
+                    // CARD ON RIGHT (Entering) -> Larger presence ("gets screen more")
+                    else {
+                        scale = 1 - (norm * 0.1); // Only shrinks to 0.9 (Big peek)
+                        opacity = 1 - (norm * 0.2);
+                        translateX = -(norm * 25); // Pull left strongly to "Peek"
+                    }
+
+                    card.style.transform = `translateX(${translateX}px) scale(${scale})`;
+                    card.style.opacity = opacity;
+                });
+            });
+
+            requestAnimationFrame(run);
+        };
+        requestAnimationFrame(run);
+    }
+
+    // --- Lightbox / Trash ---
+    initLb() {
+        const lb = document.getElementById('lightbox');
+        const img = document.getElementById('lb-img');
+        let scale=1, pX=0, pY=0, sX=0, sY=0, mode=0, dist=0;
+
+        const setT = () => img.style.transform = `translate(${pX}px,${pY}px) scale(${scale})`;
+
+        lb.addEventListener('wheel', e=>{
+            scale = Math.max(1, Math.min(4, scale - e.deltaY*0.005));
+            setT();
+        });
+
+        lb.addEventListener('touchstart', e=>{
+            if(e.touches.length===2) { mode=2; dist=Math.hypot(e.touches[0].pageX-e.touches[1].pageX, e.touches[0].pageY-e.touches[1].pageY); }
+            else if(scale>1) { mode=1; sX=e.touches[0].pageX-pX; sY=e.touches[0].pageY-pY; }
+        });
+
+        lb.addEventListener('touchmove', e=>{
+            e.preventDefault();
+            if(mode===2) {
+                let d = Math.hypot(e.touches[0].pageX-e.touches[1].pageX, e.touches[0].pageY-e.touches[1].pageY);
+                scale = Math.max(1, Math.min(4, scale * (d/dist)));
+                dist=d; setT();
+            } else if(mode===1) {
+                pX=e.touches[0].pageX-sX; pY=e.touches[0].pageY-sY;
+                setT();
+            }
+        });
+        lb.addEventListener('touchend', ()=>{mode=0; if(scale<=1){scale=1;pX=0;pY=0;setT()}});
+    }
+
+    lb(url, id) { 
+        this.currLbId = id; 
+        document.getElementById('lb-img').src = url; 
+        document.getElementById('lightbox').classList.add('open'); 
+    }
+    
+    closeLb() { 
+        document.getElementById('lightbox').classList.remove('open'); 
+        setTimeout(()=>{
+            document.getElementById('lb-img').style.transform = 'scale(1)';
+        }, 300);
+    }
+
+    async trashLb() {
+        if(!confirm('Move to bin?')) return;
+        const tx = this.db.transaction(['imgs','bin'],'readwrite');
+        const img = await this.pReq(tx.objectStore('imgs').get(this.currLbId));
+        if(img) {
+            tx.objectStore('bin').add(img);
+            tx.objectStore('imgs').delete(this.currLbId);
+            this.closeLb();
+            this.renderDashboard();
+        }
+    }
+
+    async restore(id) {
+        const tx = this.db.transaction(['imgs','bin'],'readwrite');
+        const img = await this.pReq(tx.objectStore('bin').get(id));
+        if(img) { tx.objectStore('imgs').add(img); tx.objectStore('bin').delete(id); }
+        await new Promise(r=>tx.oncomplete=r);
+        this.renderBin();
+    }
+}
+
+const app = new Gallery();
+
+</script>
+</body>
+</html>
